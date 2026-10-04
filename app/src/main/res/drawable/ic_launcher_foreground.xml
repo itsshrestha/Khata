@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A simple open ledger book, drawn inside the 66dp adaptive-icon safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,34 L52,38 L52,76 L30,72 Z" />
+    <path
+        android:fillColor="#E6F4F1"
+        android:pathData="M78,34 L56,38 L56,76 L78,72 Z" />
+    <path
+        android:strokeColor="#0F766E"
+        android:strokeWidth="2"
+        android:pathData="M35,45 L47,47.5 M35,52 L47,54.5 M35,59 L47,61.5 M61,47.5 L73,45 M61,54.5 L73,52 M61,61.5 L73,59" />
+</vector>

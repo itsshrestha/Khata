@@ -1,0 +1,17 @@
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build/
+/captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+
+# Local, non-Android tooling (JDK, Kotlin compiler, JUnit jars) used to run pure-Kotlin tests
+/.tools/
+/.test-out/
+
+**/build/

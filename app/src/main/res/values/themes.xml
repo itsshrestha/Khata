@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The real look comes from the Compose theme; this only styles the window before Compose draws. -->
+    <style name="Theme.Khata" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/khata_window_background</item>
+    </style>
+</resources>
