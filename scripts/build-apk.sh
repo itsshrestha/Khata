@@ -4,8 +4,9 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+export HOME="$PROJECT_DIR/.tools"
 export ANDROID_USER_HOME="$PROJECT_DIR/.tools/android-user-home"
-mkdir -p "$ANDROID_USER_HOME"
+mkdir -p "$ANDROID_USER_HOME" "$HOME/.android"
 export PATH="$PROJECT_DIR/.tools/android-sdk/platform-tools:$PROJECT_DIR/.tools/android-sdk/cmdline-tools/latest/bin:$PATH"
 
 echo "🔨 Building Khata Debug APK..."

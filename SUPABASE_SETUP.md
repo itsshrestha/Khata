@@ -48,7 +48,8 @@ CREATE TABLE IF NOT EXISTS public.customers (
     is_archived BOOLEAN NOT NULL DEFAULT FALSE,
     created_at BIGINT NOT NULL,
     updated_at BIGINT NOT NULL,
-    deleted_at BIGINT
+    deleted_at BIGINT,
+    device_name TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_customers_shop_id ON public.customers(shop_id);
@@ -69,7 +70,8 @@ CREATE TABLE IF NOT EXISTS public.transactions (
     transaction_date BIGINT NOT NULL,
     created_at BIGINT NOT NULL,
     updated_at BIGINT NOT NULL,
-    deleted_at BIGINT
+    deleted_at BIGINT,
+    device_name TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_transactions_shop_id ON public.transactions(shop_id);

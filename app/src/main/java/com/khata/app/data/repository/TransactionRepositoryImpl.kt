@@ -41,7 +41,11 @@ class TransactionRepositoryImpl(
     private val syncDao = database.syncOperationDao()
 
     override fun observeCustomerTransactions(customerId: String): Flow<List<Transaction>> =
-        transactionDao.observeForCustomer(customerId).map { rows -> rows.map { it.toDomain() } }
+        transactionDao.observeForCustomer(customerId).map { rows ->
+            rows.map { entity ->
+                entity.toDomain(items = itemDao.getForTransaction(entity.id).map { it.toDomain() })
+            }
+        }
 
     override fun observeTransactions(filter: TransactionFilter): Flow<List<TransactionWithCustomer>> =
         transactionDao.observeFiltered(
@@ -50,10 +54,26 @@ class TransactionRepositoryImpl(
             method = filter.paymentMethod,
             fromDay = filter.fromDate?.toEpochDay(),
             toDay = filter.toDate?.toEpochDay(),
-        ).map { rows -> rows.map { it.toDomain() } }
+        ).map { rows ->
+            rows.map { row ->
+                val items = itemDao.getForTransaction(row.transaction.id).map { it.toDomain() }
+                TransactionWithCustomer(
+                    transaction = row.transaction.toDomain(items = items),
+                    customerName = row.customerName,
+                )
+            }
+        }
 
     override fun observeRecentTransactions(limit: Int): Flow<List<TransactionWithCustomer>> =
-        transactionDao.observeRecent(limit).map { rows -> rows.map { it.toDomain() } }
+        transactionDao.observeRecent(limit).map { rows ->
+            rows.map { row ->
+                val items = itemDao.getForTransaction(row.transaction.id).map { it.toDomain() }
+                TransactionWithCustomer(
+                    transaction = row.transaction.toDomain(items = items),
+                    customerName = row.customerName,
+                )
+            }
+        }
 
     override fun observeTransaction(id: String): Flow<Transaction?> =
         transactionDao.observeById(id).map { entity ->

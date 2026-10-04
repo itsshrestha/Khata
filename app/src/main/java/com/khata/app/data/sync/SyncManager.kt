@@ -98,7 +98,7 @@ class SyncManager(
                 deletedAt = customer.deletedAt,
                 deviceName = customer.deviceName,
             )
-            supabaseClient.from("customers").upsert(remote)
+            safeUpsertCustomer(remote)
             database.customerDao().updateSyncStatus(validId, SyncStatus.SYNCED)
         }
 
@@ -124,7 +124,7 @@ class SyncManager(
                 deletedAt = tx.deletedAt,
                 deviceName = tx.deviceName,
             )
-            supabaseClient.from("transactions").upsert(remote)
+            safeUpsertTransaction(remote)
             database.transactionDao().updateSyncStatus(validTxId, SyncStatus.SYNCED)
         }
 
@@ -147,6 +147,55 @@ class SyncManager(
             )
             supabaseClient.from("transaction_items").upsert(remote)
             database.transactionItemDao().updateSyncStatus(validItemId, SyncStatus.SYNCED)
+        }
+    }
+
+    private suspend fun safeUpsertCustomer(remote: RemoteCustomer) {
+        try {
+            supabaseClient.from("customers").upsert(remote)
+        } catch (e: Exception) {
+            if (e.message?.contains("device_name", ignoreCase = true) == true) {
+                val legacy = RemoteCustomerLegacy(
+                    id = remote.id,
+                    shopId = remote.shopId,
+                    name = remote.name,
+                    phone = remote.phone,
+                    address = remote.address,
+                    notes = remote.notes,
+                    isArchived = remote.isArchived,
+                    createdAt = remote.createdAt,
+                    updatedAt = remote.updatedAt,
+                    deletedAt = remote.deletedAt,
+                )
+                supabaseClient.from("customers").upsert(legacy)
+            } else {
+                throw e
+            }
+        }
+    }
+
+    private suspend fun safeUpsertTransaction(remote: RemoteTransaction) {
+        try {
+            supabaseClient.from("transactions").upsert(remote)
+        } catch (e: Exception) {
+            if (e.message?.contains("device_name", ignoreCase = true) == true) {
+                val legacy = RemoteTransactionLegacy(
+                    id = remote.id,
+                    shopId = remote.shopId,
+                    customerId = remote.customerId,
+                    type = remote.type,
+                    amount = remote.amount,
+                    description = remote.description,
+                    paymentMethod = remote.paymentMethod,
+                    transactionDate = remote.transactionDate,
+                    createdAt = remote.createdAt,
+                    updatedAt = remote.updatedAt,
+                    deletedAt = remote.deletedAt,
+                )
+                supabaseClient.from("transactions").upsert(legacy)
+            } else {
+                throw e
+            }
         }
     }
 
@@ -188,7 +237,7 @@ class SyncManager(
             deletedAt = customer.deletedAt,
             deviceName = customer.deviceName,
         )
-        supabaseClient.from("customers").upsert(remote)
+        safeUpsertCustomer(remote)
         database.customerDao().updateSyncStatus(customer.id, SyncStatus.SYNCED)
     }
 
@@ -208,7 +257,7 @@ class SyncManager(
             deletedAt = tx.deletedAt,
             deviceName = tx.deviceName,
         )
-        supabaseClient.from("transactions").upsert(remote)
+        safeUpsertTransaction(remote)
         database.transactionDao().updateSyncStatus(tx.id, SyncStatus.SYNCED)
     }
 
