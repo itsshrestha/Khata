@@ -75,3 +75,10 @@ data class RemoteTransactionLegacy(
     @SerialName("deleted_at") val deletedAt: Long? = null,
 )
 
+@Serializable
+data class RemoteShop(
+    val id: String,
+    val name: String,
+    @SerialName("updated_at") val updatedAt: Long,
+)
+

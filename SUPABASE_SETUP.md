@@ -1,6 +1,6 @@
 # Supabase Cloud Database & Authentication Setup Guide for Khata
 
-This document provides the complete PostgreSQL schema, Row Level Security (RLS) policies, and step-by-step instructions to configure your Supabase backend for multi-device cloud synchronization.
+This document provides the complete PostgreSQL schema, Row Level Security (RLS) policies, and step-by-step instructions to configure your Supabase backend for multi-device cloud synchronization and shop name sync.
 
 ---
 
@@ -95,13 +95,20 @@ CREATE TABLE IF NOT EXISTS public.transaction_items (
 
 CREATE INDEX IF NOT EXISTS idx_transaction_items_shop_id ON public.transaction_items(shop_id);
 CREATE INDEX IF NOT EXISTS idx_transaction_items_transaction_id ON public.transaction_items(transaction_id);
+
+-- ============================================================================
+-- 4. SHOPS TABLE (For Custom Shop Name Sync)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS public.shops (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL DEFAULT 'My Shop Khata',
+    updated_at BIGINT NOT NULL
+);
 ```
 
 ---
 
 ## 4. Enable Row Level Security (RLS) & Security Policies
-
-Row Level Security ensures that authenticated users can only access records matching their own `auth.uid()` (`shop_id`).
 
 Run the following SQL in the Supabase SQL Editor:
 
@@ -111,11 +118,13 @@ GRANT USAGE ON SCHEMA public TO authenticated, anon;
 GRANT ALL ON public.customers TO authenticated, anon;
 GRANT ALL ON public.transactions TO authenticated, anon;
 GRANT ALL ON public.transaction_items TO authenticated, anon;
+GRANT ALL ON public.shops TO authenticated, anon;
 
 -- Enable RLS on all tables
 ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.transaction_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.shops ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================================
 -- CUSTOMERS RLS POLICIES
@@ -173,6 +182,13 @@ CREATE POLICY "Users can update their shop transaction items"
 CREATE POLICY "Users can delete their shop transaction items"
     ON public.transaction_items FOR DELETE
     USING (auth.uid() = shop_id);
+
+-- ============================================================================
+-- SHOPS RLS POLICIES
+-- ============================================================================
+CREATE POLICY "Users can manage their own shop details"
+    ON public.shops FOR ALL
+    USING (auth.uid() = id);
 ```
 
 ---
@@ -184,20 +200,15 @@ CREATE POLICY "Users can delete their shop transaction items"
 2. Go to **Settings > Cloud Synchronization**.
 3. Register or Sign In with `shop@example.com`.
 
-### Step 2: Create Record on Phone A
-1. Create customer **"Hari Prasad"**.
-2. Add a Credit of **Rs. 5,000**.
-3. Tap **Sync Now** or wait a few seconds.
-4. Verify Supabase Dashboard > Table Editor > `customers` & `transactions` rows appear.
+### Step 2: Create Record & Edit Shop Name on Phone A
+1. Edit Shop Name to **"Ram Store"**.
+2. Create customer **"Hari Prasad"**.
+3. Add a Credit of **Rs. 5,000**.
+4. Tap **Sync Now** or wait a few seconds.
+5. Verify Supabase Dashboard > Table Editor > `shops`, `customers` & `transactions` rows appear.
 
 ### Step 3: Connect Phone B
 1. Install Khata on **Phone B**.
 2. Sign In with the same account (`shop@example.com`).
 3. Tap **Sync Now**.
-4. **"Hari Prasad"** with **Rs. 5,000** credit appears automatically on Phone B.
-
-### Step 4: Add Payment on Phone B
-1. On **Phone B**, record a payment of **Rs. 1,500** for Hari.
-2. Tap **Sync Now**.
-3. Tap **Sync Now** on **Phone A**.
-4. Verify both phones show **Remaining Outstanding = Rs. 3,500**.
+4. **"Ram Store"**, **"Hari Prasad"** with **Rs. 5,000** credit appear automatically on Phone B.

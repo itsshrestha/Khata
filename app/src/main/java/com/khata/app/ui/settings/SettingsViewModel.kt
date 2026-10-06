@@ -47,6 +47,7 @@ class SettingsViewModel(
     private val _authError = MutableStateFlow<String?>(null)
     private val _isAuthActionLoading = MutableStateFlow(false)
     private val _appLockState = MutableStateFlow(securityPreferences.isAppLockEnabled())
+    private val _shopNameState = MutableStateFlow(securityPreferences.getShopName())
 
     @Suppress("UNCHECKED_CAST")
     val uiState: StateFlow<SettingsUiState> = combine(
@@ -59,6 +60,7 @@ class SettingsViewModel(
         _authError,
         _isAuthActionLoading,
         _appLockState,
+        _shopNameState,
     ) { args: Array<Any?> ->
         val customerCount = args[0] as Int
         val balance = args[1] as Balance
@@ -69,9 +71,11 @@ class SettingsViewModel(
         val authErr = args[6] as String?
         val isAuthLoading = args[7] as Boolean
         val appLockEnabled = args[8] as Boolean
+        val shopName = args[9] as String
 
         SettingsUiState(
             isLoading = false,
+            shopName = shopName,
             activeCustomerCount = customerCount,
             totalOutstanding = balance.outstanding,
             totalTransactionsCount = transactions.size,
@@ -89,6 +93,14 @@ class SettingsViewModel(
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
             initialValue = SettingsUiState(),
         )
+
+    fun updateShopName(newName: String): Boolean {
+        val success = securityPreferences.setShopName(newName)
+        if (success) {
+            _shopNameState.value = newName.trim()
+        }
+        return success
+    }
 
     fun setAppLockEnabled(enabled: Boolean) {
         securityPreferences.setAppLockEnabled(enabled)

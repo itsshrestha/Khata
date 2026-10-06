@@ -22,6 +22,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
+import com.khata.app.data.security.SecurityPreferences
+
 sealed interface SyncState {
     data object Synced : SyncState
     data object Syncing : SyncState
@@ -32,6 +34,7 @@ sealed interface SyncState {
 class SyncManager(
     private val database: KhataDatabase,
     private val authManager: AuthManager,
+    private val securityPreferences: SecurityPreferences? = null,
     private val supabaseClient: SupabaseClient = SupabaseClientProvider.client,
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO),
 ) {
@@ -78,6 +81,7 @@ class SyncManager(
             uploadAllLocalData(userId)
             uploadPendingQueue(userId)
             downloadRemoteChanges(userId)
+            syncShopDetails(userId)
 
             val now = System.currentTimeMillis()
             _lastSyncTimestamp.value = now
@@ -98,75 +102,81 @@ class SyncManager(
     }
 
     private suspend fun uploadAllLocalData(userId: String) {
-        val customers = database.customerDao().getAllForSync()
-        for (customer in customers) {
-            val validId = ensureValidUuid(customer.id)
-            if (validId != customer.id) {
-                database.openHelper.writableDatabase.execSQL("UPDATE transactions SET customerId = ? WHERE customerId = ?", arrayOf(validId, customer.id))
-                database.openHelper.writableDatabase.execSQL("UPDATE customers SET id = ? WHERE id = ?", arrayOf(validId, customer.id))
+        val db = database.openHelper.writableDatabase
+        db.execSQL("PRAGMA foreign_keys = OFF;")
+        try {
+            val customers = database.customerDao().getAllForSync()
+            for (customer in customers) {
+                val validId = ensureValidUuid(customer.id)
+                if (validId != customer.id) {
+                    db.execSQL("UPDATE customers SET id = ? WHERE id = ?", arrayOf(validId, customer.id))
+                    db.execSQL("UPDATE transactions SET customerId = ? WHERE customerId = ?", arrayOf(validId, customer.id))
+                }
+                val remote = RemoteCustomer(
+                    id = validId,
+                    shopId = userId,
+                    name = customer.name,
+                    phone = customer.phone,
+                    address = customer.address,
+                    notes = customer.notes,
+                    isArchived = customer.isArchived,
+                    createdAt = customer.createdAt,
+                    updatedAt = customer.updatedAt,
+                    deletedAt = customer.deletedAt,
+                    deviceName = customer.deviceName,
+                )
+                safeUpsertCustomer(remote)
+                database.customerDao().updateSyncStatus(validId, SyncStatus.SYNCED)
             }
-            val remote = RemoteCustomer(
-                id = validId,
-                shopId = userId,
-                name = customer.name,
-                phone = customer.phone,
-                address = customer.address,
-                notes = customer.notes,
-                isArchived = customer.isArchived,
-                createdAt = customer.createdAt,
-                updatedAt = customer.updatedAt,
-                deletedAt = customer.deletedAt,
-                deviceName = customer.deviceName,
-            )
-            safeUpsertCustomer(remote)
-            database.customerDao().updateSyncStatus(validId, SyncStatus.SYNCED)
-        }
 
-        val transactions = database.transactionDao().getAllForSync()
-        for (tx in transactions) {
-            val validTxId = ensureValidUuid(tx.id)
-            val validCustId = ensureValidUuid(tx.customerId)
-            if (validTxId != tx.id || validCustId != tx.customerId) {
-                database.openHelper.writableDatabase.execSQL("UPDATE transaction_items SET transactionId = ? WHERE transactionId = ?", arrayOf(validTxId, tx.id))
-                database.openHelper.writableDatabase.execSQL("UPDATE transactions SET id = ?, customerId = ? WHERE id = ?", arrayOf(validTxId, validCustId, tx.id))
+            val transactions = database.transactionDao().getAllForSync()
+            for (tx in transactions) {
+                val validTxId = ensureValidUuid(tx.id)
+                val validCustId = ensureValidUuid(tx.customerId)
+                if (validTxId != tx.id || validCustId != tx.customerId) {
+                    db.execSQL("UPDATE transactions SET id = ?, customerId = ? WHERE id = ?", arrayOf(validTxId, validCustId, tx.id))
+                    db.execSQL("UPDATE transaction_items SET transactionId = ? WHERE transactionId = ?", arrayOf(validTxId, tx.id))
+                }
+                val remote = RemoteTransaction(
+                    id = validTxId,
+                    shopId = userId,
+                    customerId = validCustId,
+                    type = tx.type.name,
+                    amount = tx.amount,
+                    description = tx.description,
+                    paymentMethod = tx.paymentMethod?.name,
+                    transactionDate = tx.transactionDate,
+                    createdAt = tx.createdAt,
+                    updatedAt = tx.updatedAt,
+                    deletedAt = tx.deletedAt,
+                    deviceName = tx.deviceName,
+                )
+                safeUpsertTransaction(remote)
+                database.transactionDao().updateSyncStatus(validTxId, SyncStatus.SYNCED)
             }
-            val remote = RemoteTransaction(
-                id = validTxId,
-                shopId = userId,
-                customerId = validCustId,
-                type = tx.type.name,
-                amount = tx.amount,
-                description = tx.description,
-                paymentMethod = tx.paymentMethod?.name,
-                transactionDate = tx.transactionDate,
-                createdAt = tx.createdAt,
-                updatedAt = tx.updatedAt,
-                deletedAt = tx.deletedAt,
-                deviceName = tx.deviceName,
-            )
-            safeUpsertTransaction(remote)
-            database.transactionDao().updateSyncStatus(validTxId, SyncStatus.SYNCED)
-        }
 
-        val items = database.transactionItemDao().getAllForSync()
-        for (item in items) {
-            val validItemId = ensureValidUuid(item.id)
-            val validTxId = ensureValidUuid(item.transactionId)
-            if (validItemId != item.id || validTxId != item.transactionId) {
-                database.openHelper.writableDatabase.execSQL("UPDATE transaction_items SET id = ?, transactionId = ? WHERE id = ?", arrayOf(validItemId, validTxId, item.id))
+            val items = database.transactionItemDao().getAllForSync()
+            for (item in items) {
+                val validItemId = ensureValidUuid(item.id)
+                val validTxId = ensureValidUuid(item.transactionId)
+                if (validItemId != item.id || validTxId != item.transactionId) {
+                    db.execSQL("UPDATE transaction_items SET id = ?, transactionId = ? WHERE id = ?", arrayOf(validItemId, validTxId, item.id))
+                }
+                val remote = RemoteTransactionItem(
+                    id = validItemId,
+                    shopId = userId,
+                    transactionId = validTxId,
+                    itemName = item.itemName,
+                    quantity = item.quantity,
+                    unitPrice = item.unitPrice,
+                    totalPrice = item.totalPrice,
+                    deletedAt = item.deletedAt,
+                )
+                supabaseClient.from("transaction_items").upsert(remote)
+                database.transactionItemDao().updateSyncStatus(validItemId, SyncStatus.SYNCED)
             }
-            val remote = RemoteTransactionItem(
-                id = validItemId,
-                shopId = userId,
-                transactionId = validTxId,
-                itemName = item.itemName,
-                quantity = item.quantity,
-                unitPrice = item.unitPrice,
-                totalPrice = item.totalPrice,
-                deletedAt = item.deletedAt,
-            )
-            supabaseClient.from("transaction_items").upsert(remote)
-            database.transactionItemDao().updateSyncStatus(validItemId, SyncStatus.SYNCED)
+        } finally {
+            db.execSQL("PRAGMA foreign_keys = ON;")
         }
     }
 
@@ -328,30 +338,32 @@ class SyncManager(
             }
             .decodeList<RemoteTransactionItem>()
 
-        database.withTransaction {
-            for (rc in remoteCustomers) {
-                val local = database.customerDao().getByIdIncludingDeleted(rc.id)
-                if (local == null || local.syncStatus == SyncStatus.SYNCED || rc.updatedAt >= local.updatedAt) {
-                    database.customerDao().insert(
-                        CustomerEntity(
-                            id = rc.id,
-                            name = rc.name,
-                            phone = rc.phone,
-                            address = rc.address,
-                            notes = rc.notes,
-                            isArchived = rc.isArchived,
-                            createdAt = rc.createdAt,
-                            updatedAt = rc.updatedAt,
-                            syncStatus = SyncStatus.SYNCED,
-                            deletedAt = rc.deletedAt,
-                            deviceName = rc.deviceName,
-                        ),
-                    )
+        val db = database.openHelper.writableDatabase
+        db.execSQL("PRAGMA foreign_keys = OFF;")
+        try {
+            database.withTransaction {
+                for (rc in remoteCustomers) {
+                    val local = database.customerDao().getByIdIncludingDeleted(rc.id)
+                    if (local == null || local.syncStatus == SyncStatus.SYNCED || rc.updatedAt >= local.updatedAt) {
+                        database.customerDao().insert(
+                            CustomerEntity(
+                                id = rc.id,
+                                name = rc.name,
+                                phone = rc.phone,
+                                address = rc.address,
+                                notes = rc.notes,
+                                isArchived = rc.isArchived,
+                                createdAt = rc.createdAt,
+                                updatedAt = rc.updatedAt,
+                                syncStatus = SyncStatus.SYNCED,
+                                deletedAt = rc.deletedAt,
+                                deviceName = rc.deviceName,
+                            ),
+                        )
+                    }
                 }
-            }
 
-            for (rt in remoteTransactions) {
-                if (database.customerDao().getByIdIncludingDeleted(rt.customerId) != null) {
+                for (rt in remoteTransactions) {
                     val local = database.transactionDao().getByIdIncludingDeleted(rt.id)
                     if (local == null || local.syncStatus == SyncStatus.SYNCED || rt.updatedAt >= local.updatedAt) {
                         val pMethod: PaymentMethod? = rt.paymentMethod?.let { methodStr ->
@@ -379,10 +391,8 @@ class SyncManager(
                         )
                     }
                 }
-            }
 
-            for (ri in remoteItems) {
-                if (database.transactionDao().getByIdIncludingDeleted(ri.transactionId) != null) {
+                for (ri in remoteItems) {
                     database.transactionItemDao().insertAll(
                         listOf(
                             TransactionItemEntity(
@@ -399,6 +409,37 @@ class SyncManager(
                     )
                 }
             }
+        } finally {
+            db.execSQL("PRAGMA foreign_keys = ON;")
+        }
+    }
+
+    private suspend fun syncShopDetails(userId: String) {
+        val secPrefs = securityPreferences ?: return
+        try {
+            val currentLocalShopName = secPrefs.getShopName()
+            val remoteShop = RemoteShop(
+                id = userId,
+                name = currentLocalShopName,
+                updatedAt = System.currentTimeMillis(),
+            )
+            supabaseClient.from("shops").upsert(remoteShop)
+
+            val remoteShops = supabaseClient.from("shops")
+                .select {
+                    filter {
+                        eq("id", userId)
+                    }
+                }
+                .decodeList<RemoteShop>()
+
+            remoteShops.firstOrNull()?.let { remote ->
+                if (remote.name.isNotBlank() && remote.name != currentLocalShopName) {
+                    secPrefs.setShopName(remote.name)
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("KhataSync", "Shop sync note (table 'shops' may not exist in Supabase yet): ${e.localizedMessage}")
         }
     }
 }

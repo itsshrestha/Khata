@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
@@ -28,6 +29,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -91,6 +93,7 @@ fun SettingsRoute() {
         onSetAppLockEnabled = viewModel::setAppLockEnabled,
         onVerifyPin = viewModel::verifyPin,
         onChangePin = viewModel::changePin,
+        onUpdateShopName = viewModel::updateShopName,
     )
 }
 
@@ -107,11 +110,14 @@ fun SettingsScreen(
     onSetAppLockEnabled: (Boolean) -> Unit = {},
     onVerifyPin: (String) -> Boolean = { false },
     onChangePin: (String) -> Boolean = { false },
+    onUpdateShopName: (String) -> Boolean = { true },
     modifier: Modifier = Modifier,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     var showAuthDialog by remember { mutableStateOf(false) }
     var showChangePinDialog by remember { mutableStateOf(false) }
+    var showEditShopNameDialog by remember { mutableStateOf(false) }
+    var shopNameInput by remember { mutableStateOf("") }
     var isRegisterMode by remember { mutableStateOf(false) }
     var emailInput by remember { mutableStateOf("") }
     var passwordInput by remember { mutableStateOf("") }
@@ -155,10 +161,10 @@ fun SettingsScreen(
                         Icon(
                             Icons.Filled.Home,
                             contentDescription = null,
-                            modifier = Modifier.padding(4.dp),
+                            modifier = Modifier.size(32.dp),
                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
                         )
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = state.shopName,
                                 style = MaterialTheme.typography.titleLarge,
@@ -168,6 +174,18 @@ fun SettingsScreen(
                                 text = "Currency: Nepalese Rupee (Rs.)",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                shopNameInput = state.shopName
+                                showEditShopNameDialog = true
+                            },
+                        ) {
+                            Icon(
+                                Icons.Filled.Edit,
+                                contentDescription = "Edit Shop Name",
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
                             )
                         }
                     }
@@ -405,6 +423,41 @@ fun SettingsScreen(
             onDismiss = { showChangePinDialog = false },
         )
     }
+
+    if (showEditShopNameDialog) {
+        AlertDialog(
+            onDismissRequest = { showEditShopNameDialog = false },
+            title = { Text("Edit Shop Name") },
+            text = {
+                OutlinedTextField(
+                    value = shopNameInput,
+                    onValueChange = { shopNameInput = it },
+                    label = { Text("Shop Name") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (shopNameInput.isNotBlank()) {
+                            onUpdateShopName(shopNameInput.trim())
+                            showEditShopNameDialog = false
+                        }
+                    },
+                    enabled = shopNameInput.isNotBlank(),
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditShopNameDialog = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
 }
 
 @Composable
@@ -415,12 +468,28 @@ private fun SyncStatusBadge(syncState: SyncState) {
         is SyncState.Offline -> Triple("⚠ Offline", Color(0xFFE65100), Icons.Filled.Warning)
         is SyncState.Error -> Triple("! Sync Failed", MaterialTheme.colorScheme.error, Icons.Filled.Warning)
     }
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Icon(icon, contentDescription = null, tint = color)
-        Text(text = label, color = color, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+    Column(horizontalAlignment = Alignment.End) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
+            Text(text = label, color = color, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+        }
+        if (syncState is SyncState.Error) {
+            Text(
+                text = syncState.message,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 2,
+            )
+        } else if (syncState is SyncState.Offline && syncState.message != "Offline") {
+            Text(
+                text = syncState.message,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
     }
 }
 
