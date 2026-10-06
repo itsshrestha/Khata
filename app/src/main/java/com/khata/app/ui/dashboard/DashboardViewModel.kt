@@ -13,6 +13,9 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import java.time.LocalDate
 
+import com.khata.app.data.sync.SyncManager
+import com.khata.app.data.sync.SyncState
+
 data class DashboardUiState(
     val isLoading: Boolean = true,
     /** Total outstanding credit in minor units, derived from all transactions. */
@@ -25,12 +28,15 @@ data class DashboardUiState(
     val todayCollection: Long = 0,
     /** Top 5 recent transactions across all customers. */
     val recentTransactions: List<TransactionWithCustomer> = emptyList(),
+    val syncState: SyncState = SyncState.Synced,
+    val lastSyncTimestamp: Long? = null,
     val hasError: Boolean = false,
 )
 
 class DashboardViewModel(
     transactionRepository: TransactionRepository,
     customerRepository: CustomerRepository,
+    private val syncManager: SyncManager,
 ) : ViewModel() {
 
     private val today = LocalDate.now()
@@ -43,12 +49,20 @@ class DashboardViewModel(
         Triple(credit, payment, recent)
     }
 
+    private val syncFlow = combine(
+        syncManager.syncState,
+        syncManager.lastSyncTimestamp,
+    ) { syncState, lastSync ->
+        Pair(syncState, lastSync)
+    }
+
     val uiState: StateFlow<DashboardUiState> = combine(
         transactionRepository.observeOverallBalance(),
         customerRepository.observeActiveCustomerCount(),
         customerRepository.observeCustomersWithOutstandingCount(),
         todayTotalsFlow,
-    ) { balance, customerCount, withOutstanding, (todayCredit, todayCollection, recent) ->
+        syncFlow,
+    ) { balance, customerCount, withOutstanding, (todayCredit, todayCollection, recent), (syncState, lastSync) ->
         DashboardUiState(
             isLoading = false,
             outstanding = balance.outstanding,
@@ -57,6 +71,8 @@ class DashboardViewModel(
             todayCredit = todayCredit,
             todayCollection = todayCollection,
             recentTransactions = recent,
+            syncState = syncState,
+            lastSyncTimestamp = lastSync,
         )
     }
         .catch { emit(DashboardUiState(isLoading = false, hasError = true)) }
@@ -65,6 +81,10 @@ class DashboardViewModel(
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
             initialValue = DashboardUiState(),
         )
+
+    fun triggerSync() {
+        syncManager.triggerSync()
+    }
 
     private companion object {
         const val STOP_TIMEOUT_MILLIS = 5_000L

@@ -9,26 +9,36 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -41,9 +51,11 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.khata.app.domain.model.TransactionType
 import com.khata.app.ui.LocalAppContainer
+import com.khata.app.ui.components.DateRangeFilterDialog
 import com.khata.app.ui.theme.ledgerColors
 import com.khata.app.utils.CurrencyFormatter
 import com.khata.app.utils.DateFormatter
+import java.time.LocalDate
 
 @Composable
 fun CustomerStatementRoute(
@@ -81,6 +93,7 @@ fun CustomerStatementRoute(
         currency = container.currencyFormatter,
         onBack = onBack,
         onShare = onShare,
+        onSetDateFilter = viewModel::setDateFilter,
     )
 }
 
@@ -91,8 +104,11 @@ fun CustomerStatementScreen(
     currency: CurrencyFormatter,
     onBack: () -> Unit,
     onShare: () -> Unit,
+    onSetDateFilter: (fromDate: LocalDate?, toDate: LocalDate?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var showFilterDialog by remember { mutableStateOf(false) }
+
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -104,6 +120,9 @@ fun CustomerStatementScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { showFilterDialog = true }) {
+                        Icon(Icons.Filled.DateRange, contentDescription = "Advanced Search Date Range")
+                    }
                     IconButton(onClick = onShare, enabled = state.customer != null) {
                         Icon(Icons.Filled.Share, contentDescription = "Share Statement")
                     }
@@ -151,6 +170,45 @@ fun CustomerStatementScreen(
                         }
                     }
 
+                    // Advanced Search Date Filter Bar
+                    item(key = "filter-bar") {
+                        if (state.fromDate != null && state.toDate != null) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                AssistChip(
+                                    onClick = { showFilterDialog = true },
+                                    label = {
+                                        Text("Filtered: ${DateFormatter.full(state.fromDate)} – ${DateFormatter.full(state.toDate)}")
+                                    },
+                                    leadingIcon = { Icon(Icons.Filled.DateRange, contentDescription = null) },
+                                    trailingIcon = {
+                                        IconButton(
+                                            onClick = { onSetDateFilter(null, null) },
+                                            modifier = Modifier.size(18.dp),
+                                        ) {
+                                            Icon(Icons.Filled.Close, contentDescription = "Clear filter")
+                                        }
+                                    },
+                                )
+                                TextButton(onClick = { onSetDateFilter(null, null) }) {
+                                    Text("Clear Filter")
+                                }
+                            }
+                        } else {
+                            OutlinedButton(
+                                onClick = { showFilterDialog = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                            ) {
+                                Icon(Icons.Filled.DateRange, contentDescription = null)
+                                Text(text = "  Advanced Search (Between Two Dates)")
+                            }
+                        }
+                    }
+
                     // Summary Card
                     item(key = "summary") {
                         Card(
@@ -183,7 +241,7 @@ fun CustomerStatementScreen(
                     if (state.statementRows.isEmpty()) {
                         item(key = "empty") {
                             Text(
-                                text = "No transactions found for this customer.",
+                                text = if (state.fromDate != null) "No transactions found between selected dates." else "No transactions found for this customer.",
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -206,6 +264,22 @@ fun CustomerStatementScreen(
                     }
                 }
             }
+        }
+
+        if (showFilterDialog) {
+            DateRangeFilterDialog(
+                initialFromDate = state.fromDate,
+                initialToDate = state.toDate,
+                onApply = { from, to ->
+                    onSetDateFilter(from, to)
+                    showFilterDialog = false
+                },
+                onReset = {
+                    onSetDateFilter(null, null)
+                    showFilterDialog = false
+                },
+                onDismiss = { showFilterDialog = false },
+            )
         }
     }
 }

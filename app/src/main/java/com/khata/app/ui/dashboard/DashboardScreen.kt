@@ -2,12 +2,14 @@ package com.khata.app.ui.dashboard
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,9 +18,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -34,6 +40,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.khata.app.data.sync.SyncState
 import com.khata.app.domain.model.TransactionType
 import com.khata.app.domain.model.TransactionWithCustomer
 import com.khata.app.ui.LocalAppContainer
@@ -58,6 +65,7 @@ fun DashboardRoute(
                 DashboardViewModel(
                     transactionRepository = container.transactionRepository,
                     customerRepository = container.customerRepository,
+                    syncManager = container.syncManager,
                 )
             }
         },
@@ -69,6 +77,7 @@ fun DashboardRoute(
         onNavigateToCustomerDetails = onNavigateToCustomerDetails,
         onNavigateToCustomers = onNavigateToCustomers,
         onAddCustomer = onAddCustomer,
+        onSyncNow = viewModel::triggerSync,
     )
 }
 
@@ -79,19 +88,21 @@ fun DashboardScreen(
     onNavigateToCustomerDetails: (String) -> Unit,
     onNavigateToCustomers: () -> Unit,
     onAddCustomer: () -> Unit,
+    onSyncNow: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val greeting = remember { DateFormatter.greeting(LocalTime.now().hour) }
     val today = remember { LocalDate.now() }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
+    Box(modifier = modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .verticalScroll(rememberScrollState())
+                .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 88.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -224,6 +235,43 @@ fun DashboardScreen(
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
+    }
+
+        ExtendedFloatingActionButton(
+            onClick = onSyncNow,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 20.dp, bottom = 20.dp),
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            icon = {
+                when (state.syncState) {
+                    is SyncState.Syncing -> {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.5.dp,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                    }
+                    is SyncState.Offline -> {
+                        Icon(Icons.Filled.Warning, contentDescription = "Offline")
+                    }
+                    else -> {
+                        Icon(Icons.Filled.Refresh, contentDescription = "Sync Now")
+                    }
+                }
+            },
+            text = {
+                Text(
+                    text = when (state.syncState) {
+                        is SyncState.Syncing -> "Syncing…"
+                        is SyncState.Offline -> "Offline"
+                        else -> "Sync Now"
+                    },
+                    fontWeight = FontWeight.SemiBold,
+                )
+            },
+        )
     }
 }
 

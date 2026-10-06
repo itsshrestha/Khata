@@ -55,10 +55,15 @@ class CustomerDetailsViewModel(
         customerRepository.observeCustomer(customerId),
         transactionRepository.observeCustomerTransactions(customerId),
     ) { customer, transactions ->
+        val sortedTransactions = transactions.sortedWith(
+            compareByDescending<Transaction> { it.date }
+                .thenByDescending { it.createdAt }
+                .thenByDescending { it.id }
+        )
         CustomerDetailsUiState(
             isLoading = false,
             customer = customer,
-            transactions = transactions,
+            transactions = sortedTransactions,
             notFound = customer == null,
         )
     }.catch { emit(CustomerDetailsUiState(isLoading = false, hasError = true)) }

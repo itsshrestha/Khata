@@ -29,7 +29,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -45,6 +48,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.khata.app.domain.model.CustomerWithBalance
 import com.khata.app.ui.LocalAppContainer
 import com.khata.app.ui.components.CustomerAvatar
+import com.khata.app.ui.components.DateRangeFilterDialog
 import com.khata.app.ui.theme.ledgerColors
 import com.khata.app.ui.transactions.DateRangePreset
 import com.khata.app.utils.CurrencyFormatter
@@ -72,6 +76,7 @@ fun ReportsRoute(
         currency = container.currencyFormatter,
         onCustomerClick = onCustomerClick,
         onSetPeriod = viewModel::setPeriod,
+        onSetCustomDateRange = viewModel::setCustomDateRange,
     )
 }
 
@@ -82,10 +87,12 @@ fun ReportsScreen(
     currency: CurrencyFormatter,
     onCustomerClick: (String) -> Unit,
     onSetPeriod: (DateRangePreset) -> Unit,
+    onSetCustomDateRange: (LocalDate, LocalDate) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     val creditColor = MaterialTheme.ledgerColors.credit
     val paymentColor = MaterialTheme.ledgerColors.payment
+    var showFilterDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = modifier,
@@ -113,11 +120,24 @@ fun ReportsScreen(
                 ) {
                     DateRangePreset.entries.forEach { preset ->
                         FilterChip(
-                            selected = state.period == preset,
+                            selected = state.customFromDate == null && state.period == preset,
                             onClick = { onSetPeriod(preset) },
                             label = { Text(preset.displayName) },
                         )
                     }
+                    FilterChip(
+                        selected = state.customFromDate != null,
+                        onClick = { showFilterDialog = true },
+                        label = {
+                            Text(
+                                text = if (state.customFromDate != null && state.customToDate != null) {
+                                    "📅 ${DateFormatter.full(state.customFromDate)} – ${DateFormatter.full(state.customToDate)}"
+                                } else {
+                                    "🔍 Advanced Search"
+                                },
+                            )
+                        },
+                    )
                 }
 
                 // Summary KPI Cards Grid
@@ -215,6 +235,22 @@ fun ReportsScreen(
                     }
                 }
             }
+        }
+
+        if (showFilterDialog) {
+            DateRangeFilterDialog(
+                initialFromDate = state.customFromDate,
+                initialToDate = state.customToDate,
+                onApply = { from, to ->
+                    onSetCustomDateRange(from, to)
+                    showFilterDialog = false
+                },
+                onReset = {
+                    onSetPeriod(DateRangePreset.THIS_MONTH)
+                    showFilterDialog = false
+                },
+                onDismiss = { showFilterDialog = false },
+            )
         }
     }
 }

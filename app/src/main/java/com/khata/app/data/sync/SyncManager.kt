@@ -14,9 +14,12 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.from
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 sealed interface SyncState {
@@ -39,10 +42,27 @@ class SyncManager(
     private val _lastSyncTimestamp = MutableStateFlow<Long?>(null)
     val lastSyncTimestamp: StateFlow<Long?> = _lastSyncTimestamp.asStateFlow()
 
+    private var autoSyncJob: Job? = null
+
     fun triggerSync() {
         scope.launch {
             performSync()
         }
+    }
+
+    fun startForegroundAutoSync(intervalMillis: Long = 30_000L) {
+        if (autoSyncJob?.isActive == true) return
+        autoSyncJob = scope.launch {
+            while (isActive) {
+                delay(intervalMillis)
+                performSync()
+            }
+        }
+    }
+
+    fun stopForegroundAutoSync() {
+        autoSyncJob?.cancel()
+        autoSyncJob = null
     }
 
     suspend fun performSync(): Result<Unit> = runCatching {

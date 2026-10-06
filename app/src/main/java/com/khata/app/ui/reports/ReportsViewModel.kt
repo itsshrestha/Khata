@@ -26,6 +26,8 @@ data class DailySummary(
 data class ReportsUiState(
     val isLoading: Boolean = true,
     val period: DateRangePreset = DateRangePreset.THIS_MONTH,
+    val customFromDate: LocalDate? = null,
+    val customToDate: LocalDate? = null,
     val totalOutstanding: Long = 0,
     val periodCredit: Long = 0,
     val periodCollection: Long = 0,
@@ -41,28 +43,35 @@ class ReportsViewModel(
 ) : ViewModel() {
 
     private val periodState = MutableStateFlow(DateRangePreset.THIS_MONTH)
+    private val customRangeState = MutableStateFlow<Pair<LocalDate, LocalDate>?>(null)
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    private val periodTotalsFlow = periodState.flatMapLatest { preset ->
-        val (from, to) = preset.filterDates()
-        val fromDate = from ?: LocalDate.now().minusDays(30)
-        val toDate = to ?: LocalDate.now()
-
+    private val periodTotalsFlow = combine(periodState, customRangeState) { preset, customRange ->
+        if (customRange != null) {
+            Pair(customRange.first, customRange.second)
+        } else {
+            val (from, to) = preset.filterDates()
+            Pair(from ?: LocalDate.now().minusDays(30), to ?: LocalDate.now())
+        }
+    }.flatMapLatest { (fromDate, toDate) ->
         combine(
             transactionRepository.observeTotal(TransactionType.CREDIT, fromDate, toDate),
             transactionRepository.observeTotal(TransactionType.PAYMENT, fromDate, toDate),
             transactionRepository.observeTransactions(),
         ) { credit, payment, allTx ->
-            Triple(credit, payment, allTx)
+            Tuple4(credit, payment, allTx, fromDate to toDate)
         }
     }
 
+    private data class Tuple4<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
+
     val uiState: StateFlow<ReportsUiState> = combine(
         periodState,
+        customRangeState,
         transactionRepository.observeOverallBalance(),
         customerRepository.observeCustomers(),
         periodTotalsFlow,
-    ) { period, overallBalance, customers, (periodCredit, periodCollection, allTx) ->
+    ) { period, customRange, overallBalance, customers, (periodCredit, periodCollection, allTx, dateRange) ->
         val topDebtors = customers
             .filter { it.balance.outstanding > 0 }
             .sortedByDescending { it.balance.outstanding }
@@ -70,9 +79,9 @@ class ReportsViewModel(
 
         val netChange = periodCredit - periodCollection
 
-        // Daily breakdown for visual chart (last 7 days)
-        val today = LocalDate.now()
-        val daysList = (0..6).map { today.minusDays(it.toLong()) }.reversed()
+        // Daily breakdown for visual chart (last 7 days up to end date)
+        val endDate = dateRange.second
+        val daysList = (0..6).map { endDate.minusDays(it.toLong()) }.reversed()
         val dailyBreakdown = daysList.map { date ->
             val dayCredits = allTx
                 .filter { it.transaction.date == date && it.transaction.type == TransactionType.CREDIT }
@@ -86,6 +95,8 @@ class ReportsViewModel(
         ReportsUiState(
             isLoading = false,
             period = period,
+            customFromDate = customRange?.first,
+            customToDate = customRange?.second,
             totalOutstanding = overallBalance.outstanding,
             periodCredit = periodCredit,
             periodCollection = periodCollection,
@@ -102,7 +113,16 @@ class ReportsViewModel(
         )
 
     fun setPeriod(period: DateRangePreset) {
+        customRangeState.value = null
         periodState.value = period
+    }
+
+    fun setCustomDateRange(fromDate: LocalDate, toDate: LocalDate) {
+        customRangeState.value = Pair(fromDate, toDate)
+    }
+
+    fun clearCustomDateRange() {
+        customRangeState.value = null
     }
 
     private companion object {

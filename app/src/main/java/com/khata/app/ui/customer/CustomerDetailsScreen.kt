@@ -246,6 +246,7 @@ fun CustomerDetailsScreen(
                 currency = currency,
                 onAddCredit = onAddCredit,
                 onRecordPayment = onRecordPayment,
+                onViewStatement = onViewStatement,
                 onDeleteTransactionClick = { transactionToDelete = it },
                 onTransactionClick = { selectedTransactionForDetail = it },
                 modifier = Modifier.padding(innerPadding),
@@ -313,13 +314,15 @@ private fun CustomerDetailsContent(
     currency: CurrencyFormatter,
     onAddCredit: () -> Unit,
     onRecordPayment: () -> Unit,
+    onViewStatement: () -> Unit,
     onDeleteTransactionClick: (Transaction) -> Unit,
     onTransactionClick: (Transaction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val today = remember { LocalDate.now() }
-    // Group by business date; LinkedHashMap keeps the oldest-first order from the database.
-    val groupedByDate = remember(transactions) { transactions.groupBy { it.date } }
+    val recentTransactions = remember(transactions) { transactions.take(5) }
+    // Group recent transactions by business date
+    val groupedByDate = remember(recentTransactions) { recentTransactions.groupBy { it.date } }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -342,11 +345,23 @@ private fun CustomerDetailsContent(
             )
         }
         item(key = "history-title") {
-            Text(
-                text = "Transaction History",
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(top = 12.dp),
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Recent Transactions",
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                if (transactions.isNotEmpty()) {
+                    TextButton(onClick = onViewStatement) {
+                        Text("See More")
+                    }
+                }
+            }
         }
 
         if (transactions.isEmpty()) {
@@ -375,6 +390,21 @@ private fun CustomerDetailsContent(
                         onDeleteClick = { onDeleteTransactionClick(transaction) },
                         onClick = { onTransactionClick(transaction) },
                     )
+                }
+            }
+
+            if (transactions.size > 5) {
+                item(key = "see-more-btn") {
+                    OutlinedButton(
+                        onClick = onViewStatement,
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        shape = RoundedCornerShape(14.dp),
+                    ) {
+                        Text(
+                            text = "See More (${transactions.size} Total Records)",
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                    }
                 }
             }
         }

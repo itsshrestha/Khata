@@ -63,10 +63,13 @@ fun KhataApp() {
                         NavigationBarItem(
                             selected = currentDestination?.hierarchy?.any { it.route == destination.route } == true,
                             onClick = {
+                                val isDashboard = destination.route == TopLevelDestination.Dashboard.route
                                 navController.navigate(destination.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = !isDashboard
+                                    }
                                     launchSingleTop = true
-                                    restoreState = true
+                                    restoreState = !isDashboard
                                 }
                             },
                             icon = { Icon(destination.icon, contentDescription = destination.label) },
@@ -138,9 +141,9 @@ fun KhataApp() {
                     .collectAsStateWithLifecycle()
                 val navigateToDashboard = {
                     navController.navigate(TopLevelDestination.Dashboard.route) {
-                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                        popUpTo(navController.graph.findStartDestination().id) { saveState = false }
                         launchSingleTop = true
-                        restoreState = true
+                        restoreState = false
                     }
                 }
                 CustomerDetailsRoute(

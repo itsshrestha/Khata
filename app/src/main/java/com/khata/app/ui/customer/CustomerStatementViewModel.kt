@@ -9,6 +9,7 @@ import com.khata.app.domain.model.Transaction
 import com.khata.app.domain.model.TransactionType
 import com.khata.app.utils.CurrencyFormatter
 import com.khata.app.utils.DateFormatter
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
@@ -21,12 +22,19 @@ data class StatementRow(
     val runningBalance: Long,
 )
 
+data class DateFilterRange(
+    val fromDate: LocalDate? = null,
+    val toDate: LocalDate? = null,
+)
+
 data class CustomerStatementUiState(
     val isLoading: Boolean = true,
     val customer: CustomerWithBalance? = null,
     val statementRows: List<StatementRow> = emptyList(),
     val totalCredit: Long = 0,
     val totalPaid: Long = 0,
+    val fromDate: LocalDate? = null,
+    val toDate: LocalDate? = null,
     val hasError: Boolean = false,
 )
 
@@ -36,27 +44,45 @@ class CustomerStatementViewModel(
     transactionRepository: TransactionRepository,
 ) : ViewModel() {
 
+    private val dateFilterState = MutableStateFlow(DateFilterRange())
+
     val uiState: StateFlow<CustomerStatementUiState> = combine(
         customerRepository.observeCustomer(customerId),
         transactionRepository.observeCustomerTransactions(customerId),
-    ) { customer, transactions ->
+        dateFilterState,
+    ) { customer: CustomerWithBalance?, transactions: List<Transaction>, dateFilter: DateFilterRange ->
+        val fromDate = dateFilter.fromDate
+        val toDate = dateFilter.toDate
         var running = 0L
-        val rows = transactions.map { tx ->
+        val allRows = transactions.map { tx ->
             when (tx.type) {
                 TransactionType.CREDIT -> running += tx.amount
                 TransactionType.PAYMENT -> running -= tx.amount
             }
             StatementRow(transaction = tx, runningBalance = running)
         }
-        val totalCredit = transactions.filter { it.type == TransactionType.CREDIT }.sumOf { it.amount }
-        val totalPaid = transactions.filter { it.type == TransactionType.PAYMENT }.sumOf { it.amount }
+
+        val filteredRows = if (fromDate != null && toDate != null) {
+            allRows.filter { row ->
+                val txDate = row.transaction.date
+                (txDate.isEqual(fromDate) || txDate.isAfter(fromDate)) &&
+                    (txDate.isEqual(toDate) || txDate.isBefore(toDate))
+            }
+        } else {
+            allRows
+        }
+
+        val totalCredit = filteredRows.filter { it.transaction.type == TransactionType.CREDIT }.sumOf { it.transaction.amount }
+        val totalPaid = filteredRows.filter { it.transaction.type == TransactionType.PAYMENT }.sumOf { it.transaction.amount }
 
         CustomerStatementUiState(
             isLoading = false,
             customer = customer,
-            statementRows = rows,
+            statementRows = filteredRows,
             totalCredit = totalCredit,
             totalPaid = totalPaid,
+            fromDate = fromDate,
+            toDate = toDate,
         )
     }
         .catch { emit(CustomerStatementUiState(isLoading = false, hasError = true)) }
@@ -65,6 +91,10 @@ class CustomerStatementViewModel(
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
             initialValue = CustomerStatementUiState(),
         )
+
+    fun setDateFilter(fromDate: LocalDate?, toDate: LocalDate?) {
+        dateFilterState.value = DateFilterRange(fromDate, toDate)
+    }
 
     fun generateShareableText(currency: CurrencyFormatter): String {
         val state = uiState.value

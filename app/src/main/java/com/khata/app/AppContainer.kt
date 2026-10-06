@@ -49,5 +49,6 @@ class AppContainer(context: Context) {
     init {
         SyncWorker.schedulePeriodicSync(context)
         syncManager.triggerSync()
+        syncManager.startForegroundAutoSync(30_000L)
     }
 }
