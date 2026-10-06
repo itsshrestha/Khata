@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -25,6 +26,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -32,6 +34,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -51,6 +54,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import androidx.compose.material3.Switch
 import com.khata.app.data.sync.AuthState
 import com.khata.app.data.sync.SyncState
 import com.khata.app.ui.LocalAppContainer
@@ -70,6 +74,7 @@ fun SettingsRoute() {
                     transactionRepository = container.transactionRepository,
                     authManager = container.authManager,
                     syncManager = container.syncManager,
+                    securityPreferences = container.securityPreferences,
                 )
             }
         },
@@ -83,6 +88,9 @@ fun SettingsRoute() {
         onSignUp = viewModel::signUp,
         onSignOut = viewModel::signOut,
         onClearAuthError = viewModel::clearAuthError,
+        onSetAppLockEnabled = viewModel::setAppLockEnabled,
+        onVerifyPin = viewModel::verifyPin,
+        onChangePin = viewModel::changePin,
     )
 }
 
@@ -96,10 +104,14 @@ fun SettingsScreen(
     onSignUp: (String, String) -> Unit = { _, _ -> },
     onSignOut: () -> Unit = {},
     onClearAuthError: () -> Unit = {},
+    onSetAppLockEnabled: (Boolean) -> Unit = {},
+    onVerifyPin: (String) -> Boolean = { false },
+    onChangePin: (String) -> Boolean = { false },
     modifier: Modifier = Modifier,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     var showAuthDialog by remember { mutableStateOf(false) }
+    var showChangePinDialog by remember { mutableStateOf(false) }
     var isRegisterMode by remember { mutableStateOf(false) }
     var emailInput by remember { mutableStateOf("") }
     var passwordInput by remember { mutableStateOf("") }
@@ -153,7 +165,7 @@ fun SettingsScreen(
                                 fontWeight = FontWeight.Bold,
                             )
                             Text(
-                                text = "Currency: Nepalese / Indian Rupee (Rs.)",
+                                text = "Currency: Nepalese Rupee (Rs.)",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
                             )
@@ -178,7 +190,12 @@ fun SettingsScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                Icon(Icons.Filled.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                Icon(
+                                    Icons.Filled.Refresh,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp),
+                                )
                                 Text(text = "Sync Status", style = MaterialTheme.typography.titleMedium)
                             }
                             SyncStatusBadge(state.syncState)
@@ -205,8 +222,8 @@ fun SettingsScreen(
                                 modifier = Modifier.weight(1f),
                                 enabled = state.syncState !is SyncState.Syncing,
                             ) {
-                                Icon(Icons.Filled.Refresh, contentDescription = null)
-                                Spacer(Modifier.padding(4.dp))
+                                Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.padding(2.dp))
                                 Text("Sync Now")
                             }
 
@@ -244,22 +261,66 @@ fun SettingsScreen(
                 }
 
                 // Privacy & Security
-                Text(text = "Data Safety & Security", style = MaterialTheme.typography.titleLarge)
+                Text(text = "App Lock & Security Code", style = MaterialTheme.typography.titleLarge)
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 ) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Icon(Icons.Filled.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            Column {
-                                Text(text = "Offline-First Local Storage", style = MaterialTheme.typography.titleMedium)
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                                 Text(
-                                    text = "All shop credit data is saved locally in Room SQLite first. When internet is available, changes automatically sync with Supabase PostgreSQL under your account.",
+                                    text = "App Lock (Require PIN on Launch)",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Text(
+                                    text = "Require 4-digit security code whenever Khata is opened.",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
+                            }
+                            Switch(
+                                checked = state.isAppLockEnabled,
+                                onCheckedChange = onSetAppLockEnabled,
+                            )
+                        }
+
+                        HorizontalDivider()
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                                Text(
+                                    text = "Security Code (4-Digit PIN)",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Text(
+                                    text = "Required to delete customer history or statements.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            OutlinedButton(
+                                onClick = { showChangePinDialog = true },
+                                shape = RoundedCornerShape(12.dp),
+                            ) {
+                                Icon(
+                                    Icons.Filled.Lock,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                                Spacer(Modifier.padding(2.dp))
+                                Text("Change Code")
                             }
                         }
                     }
@@ -331,6 +392,17 @@ fun SettingsScreen(
                     Text("Cancel")
                 }
             },
+        )
+    }
+
+    if (showChangePinDialog) {
+        ChangePinDialog(
+            onVerifyCurrentPin = onVerifyPin,
+            onChangePin = onChangePin,
+            onSuccess = {
+                showChangePinDialog = false
+            },
+            onDismiss = { showChangePinDialog = false },
         )
     }
 }

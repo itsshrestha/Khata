@@ -21,6 +21,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import com.khata.app.ui.security.AppLockScreen
 import com.khata.app.ui.credit.AddCreditRoute
 import com.khata.app.ui.customer.CustomerDetailsRoute
 import com.khata.app.ui.customer.CustomerStatementRoute
@@ -44,16 +48,26 @@ private fun NavBackStackEntry.customerId(): String =
 
 @Composable
 fun KhataApp() {
-    val navController = rememberNavController()
-    val backStackEntry by navController.currentBackStackEntryAsState()
-    val currentDestination = backStackEntry?.destination
+    val container = LocalAppContainer.current
+    val isAppLockEnabled = container.securityPreferences.isAppLockEnabled()
+    var isUnlocked by rememberSaveable { mutableStateOf(!isAppLockEnabled) }
 
-    // The bottom bar belongs to the five main sections only; detail screens use the full height.
-    val showBottomBar = TopLevelDestination.entries.any { destination ->
-        currentDestination?.hierarchy?.any { it.route == destination.route } == true
-    }
+    if (!isUnlocked && isAppLockEnabled) {
+        AppLockScreen(
+            onVerifyPin = container.securityPreferences::verifyCode,
+            onUnlock = { isUnlocked = true },
+        )
+    } else {
+        val navController = rememberNavController()
+        val backStackEntry by navController.currentBackStackEntryAsState()
+        val currentDestination = backStackEntry?.destination
 
-    Scaffold(
+        // The bottom bar belongs to the five main sections only; detail screens use the full height.
+        val showBottomBar = TopLevelDestination.entries.any { destination ->
+            currentDestination?.hierarchy?.any { it.route == destination.route } == true
+        }
+
+        Scaffold(
         // Each screen handles its own top (status bar) inset; the NavigationBar handles the bottom one.
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
@@ -199,3 +213,6 @@ fun KhataApp() {
         }
     }
 }
+}
+
+

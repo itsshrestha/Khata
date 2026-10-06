@@ -62,6 +62,7 @@ import com.khata.app.domain.model.TransactionType
 import com.khata.app.domain.usecase.ValidateTransactionChangeUseCase
 import com.khata.app.ui.LocalAppContainer
 import com.khata.app.ui.components.CustomerAvatar
+import com.khata.app.ui.components.SecurityPinDialog
 import com.khata.app.ui.theme.ledgerColors
 import com.khata.app.utils.CurrencyFormatter
 import com.khata.app.utils.DateFormatter
@@ -111,6 +112,7 @@ fun CustomerDetailsRoute(
         onArchive = viewModel::archiveCustomer,
         onDeleteCustomer = viewModel::deleteCustomer,
         onDeleteTransaction = viewModel::deleteTransaction,
+        onVerifyPin = container.securityPreferences::verifyCode,
         onActionErrorShown = viewModel::onActionErrorShown,
         feedbackMessage = feedbackMessage,
         onFeedbackShown = onFeedbackShown,
@@ -131,6 +133,7 @@ fun CustomerDetailsScreen(
     onArchive: () -> Unit,
     onDeleteCustomer: () -> Unit,
     onDeleteTransaction: (String) -> Unit,
+    onVerifyPin: (String) -> Boolean = { false },
     onActionErrorShown: () -> Unit,
     modifier: Modifier = Modifier,
     feedbackMessage: String? = null,
@@ -142,6 +145,8 @@ fun CustomerDetailsScreen(
     var showDeleteCustomerDialog by rememberSaveable { mutableStateOf(false) }
     var transactionToDelete by remember { mutableStateOf<Transaction?>(null) }
     var selectedTransactionForDetail by remember { mutableStateOf<Transaction?>(null) }
+    var pendingSecurityAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var securityActionTitle by remember { mutableStateOf("") }
 
     // Success messages sent back by other screens, e.g. "✓ Credit added successfully".
     LaunchedEffect(feedbackMessage) {
@@ -270,7 +275,8 @@ fun CustomerDetailsScreen(
                 isArchiving = state.isArchiving,
                 onConfirm = {
                     showArchiveDialog = false
-                    onArchive()
+                    securityActionTitle = "Archive Customer"
+                    pendingSecurityAction = { onArchive() }
                 },
                 onDismiss = { showArchiveDialog = false },
             )
@@ -284,7 +290,8 @@ fun CustomerDetailsScreen(
                 isDeleting = state.isDeleting,
                 onConfirm = {
                     showDeleteCustomerDialog = false
-                    onDeleteCustomer()
+                    securityActionTitle = "Delete Customer"
+                    pendingSecurityAction = { onDeleteCustomer() }
                 },
                 onDismiss = { showDeleteCustomerDialog = false },
             )
@@ -298,9 +305,24 @@ fun CustomerDetailsScreen(
                 onConfirm = {
                     val id = transactionToDelete!!.id
                     transactionToDelete = null
-                    onDeleteTransaction(id)
+                    securityActionTitle = "Delete Transaction"
+                    pendingSecurityAction = { onDeleteTransaction(id) }
                 },
                 onDismiss = { transactionToDelete = null },
+            )
+        }
+
+        if (pendingSecurityAction != null) {
+            SecurityPinDialog(
+                title = securityActionTitle,
+                actionDescription = "Enter 4-digit security code to confirm",
+                onVerify = onVerifyPin,
+                onSuccess = {
+                    val action = pendingSecurityAction
+                    pendingSecurityAction = null
+                    action?.invoke()
+                },
+                onDismiss = { pendingSecurityAction = null },
             )
         }
     }

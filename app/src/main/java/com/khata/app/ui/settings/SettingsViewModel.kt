@@ -18,6 +18,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+import com.khata.app.data.security.SecurityPreferences
+
 data class SettingsUiState(
     val isLoading: Boolean = true,
     val shopName: String = "My Shop Khata",
@@ -30,6 +32,7 @@ data class SettingsUiState(
     val lastSyncTimestamp: Long? = null,
     val authError: String? = null,
     val isAuthActionLoading: Boolean = false,
+    val isAppLockEnabled: Boolean = false,
     val hasError: Boolean = false,
 )
 
@@ -38,10 +41,12 @@ class SettingsViewModel(
     transactionRepository: TransactionRepository,
     private val authManager: AuthManager,
     private val syncManager: SyncManager,
+    private val securityPreferences: SecurityPreferences,
 ) : ViewModel() {
 
     private val _authError = MutableStateFlow<String?>(null)
     private val _isAuthActionLoading = MutableStateFlow(false)
+    private val _appLockState = MutableStateFlow(securityPreferences.isAppLockEnabled())
 
     @Suppress("UNCHECKED_CAST")
     val uiState: StateFlow<SettingsUiState> = combine(
@@ -53,6 +58,7 @@ class SettingsViewModel(
         syncManager.lastSyncTimestamp,
         _authError,
         _isAuthActionLoading,
+        _appLockState,
     ) { args: Array<Any?> ->
         val customerCount = args[0] as Int
         val balance = args[1] as Balance
@@ -62,6 +68,7 @@ class SettingsViewModel(
         val lastSync = args[5] as Long?
         val authErr = args[6] as String?
         val isAuthLoading = args[7] as Boolean
+        val appLockEnabled = args[8] as Boolean
 
         SettingsUiState(
             isLoading = false,
@@ -73,6 +80,7 @@ class SettingsViewModel(
             lastSyncTimestamp = lastSync,
             authError = authErr,
             isAuthActionLoading = isAuthLoading,
+            isAppLockEnabled = appLockEnabled,
         )
     }
         .catch { emit(SettingsUiState(isLoading = false, hasError = true)) }
@@ -81,6 +89,20 @@ class SettingsViewModel(
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
             initialValue = SettingsUiState(),
         )
+
+    fun setAppLockEnabled(enabled: Boolean) {
+        securityPreferences.setAppLockEnabled(enabled)
+        _appLockState.value = enabled
+    }
+
+    fun verifyPin(pin: String): Boolean {
+        return securityPreferences.verifyCode(pin)
+    }
+
+    fun changePin(newPin: String): Boolean {
+        val success = securityPreferences.setSecurityCode(newPin)
+        return success
+    }
 
     fun triggerSyncNow() {
         syncManager.triggerSync()

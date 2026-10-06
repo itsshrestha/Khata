@@ -6,6 +6,7 @@ import com.khata.app.data.repository.CustomerRepository
 import com.khata.app.data.repository.CustomerRepositoryImpl
 import com.khata.app.data.repository.TransactionRepository
 import com.khata.app.data.repository.TransactionRepositoryImpl
+import com.khata.app.data.security.SecurityPreferences
 import com.khata.app.data.sync.AuthManager
 import com.khata.app.data.sync.SyncManager
 import com.khata.app.data.sync.SyncWorker
@@ -42,6 +43,10 @@ class AppContainer(context: Context) {
             database = database,
             onDataChanged = { syncManager.triggerSync() },
         )
+    }
+
+    val securityPreferences: SecurityPreferences by lazy {
+        SecurityPreferences(context)
     }
 
     val currencyFormatter: CurrencyFormatter = CurrencyFormatter()
