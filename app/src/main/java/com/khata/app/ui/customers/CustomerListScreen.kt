@@ -1,14 +1,17 @@
 package com.khata.app.ui.customers
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,6 +19,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -32,6 +36,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -59,12 +64,15 @@ fun CustomerListRoute(
     )
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val query by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val sortOrder by viewModel.sortOrder.collectAsStateWithLifecycle()
 
     CustomerListScreen(
         state = state,
         query = query,
+        sortOrder = sortOrder,
         currency = container.currencyFormatter,
         onQueryChange = viewModel::onSearchQueryChange,
+        onToggleSortOrder = viewModel::onToggleSortOrder,
         onAddCustomer = onAddCustomer,
         onCustomerClick = onCustomerClick,
     )
@@ -74,8 +82,10 @@ fun CustomerListRoute(
 fun CustomerListScreen(
     state: CustomerListUiState,
     query: String,
+    sortOrder: SortOrder,
     currency: CurrencyFormatter,
     onQueryChange: (String) -> Unit,
+    onToggleSortOrder: () -> Unit,
     onAddCustomer: () -> Unit,
     onCustomerClick: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -102,7 +112,21 @@ fun CustomerListScreen(
                 modifier = Modifier.padding(top = 16.dp, bottom = 12.dp),
             )
 
-            SearchField(query = query, onQueryChange = onQueryChange)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SearchField(
+                    query = query,
+                    onQueryChange = onQueryChange,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                SortButton(
+                    sortOrder = sortOrder,
+                    onToggle = onToggleSortOrder,
+                )
+            }
 
             Box(modifier = Modifier.fillMaxSize().padding(top = 12.dp)) {
                 when {
@@ -131,11 +155,15 @@ fun CustomerListScreen(
 }
 
 @Composable
-private fun SearchField(query: String, onQueryChange: (String) -> Unit) {
+private fun SearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     OutlinedTextField(
         value = query,
         onValueChange = onQueryChange,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier,
         placeholder = { Text("Search by name or phone") },
         leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
         trailingIcon = {
@@ -149,6 +177,29 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit) {
         shape = RoundedCornerShape(16.dp),
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
     )
+}
+
+@Composable
+private fun SortButton(
+    sortOrder: SortOrder,
+    onToggle: () -> Unit,
+) {
+    val rotation by animateFloatAsState(
+        targetValue = if (sortOrder == SortOrder.NAME_AZ) 180f else 0f,
+        label = "sortRotation",
+    )
+    IconButton(onClick = onToggle) {
+        Icon(
+            imageVector = Icons.Filled.Notifications,
+            contentDescription = if (sortOrder == SortOrder.DESCENDING) {
+                "Sorted by outstanding descending. Tap to sort A-Z."
+            } else {
+                "Sorted A-Z by name. Tap to sort by outstanding."
+            },
+            modifier = Modifier.rotate(rotation),
+            tint = MaterialTheme.colorScheme.primary,
+        )
+    }
 }
 
 @Composable
